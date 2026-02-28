@@ -60,6 +60,41 @@ source:
 Meson `feature` options use `enabled|disabled|auto` (not `true/false`).
 String plugin toggles may use `'false'`.
 
+### Python/numpy version constraints
+`numpy <2` doesn't support Python 3.14+. Pin Python in both host and run requirements:
+
+```yaml
+requirements:
+  host:
+    - python >=3.9,<3.13
+  run:
+    - python >=3.9,<3.13
+    - numpy <2
+```
+
+### Python scripts need shebang
+Single-file Python scripts copied to `bin/` need a shebang to be executable:
+
+```yaml
+build:
+  script:
+    - mkdir -p $PREFIX/bin
+    - |
+      cat > $PREFIX/bin/myapp << 'EOF'
+      #!/usr/bin/env python
+      EOF
+    - cat myapp.py >> $PREFIX/bin/myapp
+    - chmod +x $PREFIX/bin/myapp
+```
+
+Without the shebang, you'll get: `Exec format error`
+
+### Conda-forge package naming
+Use exact package names from conda-forge:
+- `pyqt6` (not `pyqt >=6`)
+- `opencv` (not `opencv-python`)
+- Use `pixi search <package>` to find correct names
+
 Example:
 
 ```yaml
@@ -155,6 +190,27 @@ rattler-build upload prefix \
   --skip-existing \
   output/linux-64/<artifact>.conda
 ```
+
+**Tip**: Add `-vvv` for verbose output to confirm upload success:
+```bash
+rattler-build upload prefix -vvv --channel nandi-testing output/linux-64/<artifact>.conda
+```
+
+**Note**: A `502 Bad Gateway` error from prefix.dev can mean two things:
+1. **Package already exists** - Increment `build.number` in your recipe and rebuild
+2. **Upload succeeded but response failed** - The upload may have completed before the 502
+
+To check if the upload actually succeeded, compare SHA256 hashes:
+
+```bash
+# Get your local hash
+sha256sum output/linux-64/<package>-<version>-<build>.conda
+
+# Check the channel's hash
+pixi search <package-name> --channel https://prefix.dev/<channel>
+```
+
+If the SHA256 matches, the upload succeeded despite the 502. If not, increment `build.number` and rebuild.
 
 If not logged in yet:
 
