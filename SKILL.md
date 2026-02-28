@@ -120,7 +120,61 @@ output/linux-64/<name>-<version>-<build>.conda
 
 ---
 
-## 4) Pre-push Validation
+## 4) Smoketest (REQUIRED before uploading)
+
+**Always smoketest the built package locally before uploading.** This catches runtime issues like missing libraries, wrong sonames, and RPATH problems that the build process won't detect.
+
+### Extract and test the package
+
+```bash
+# Extract the built package to a temp directory
+PKG=output/linux-64/<package>-<version>-<build>.conda
+mkdir -p /tmp/smoketest && cd /tmp/smoketest
+rm -rf * && unzip -q $PKG && zstd -d *.tar.zst && tar -xf *.tar
+
+# Test that executables run
+./bin/<executable> --help
+./bin/<executable> --version
+
+# Check library loading (Linux)
+ldd ./bin/<executable> | grep "not found"  # Should return nothing
+```
+
+### Test with pixi global install
+
+For a more realistic test, install via pixi and run:
+
+```bash
+# Install the package globally
+pixi global install --channel ./output --channel conda-forge <package>
+
+# Run the executable
+<executable> --help
+<executable> --version
+
+# Uninstall when done
+pixi global uninstall <package>
+```
+
+### Common smoketest failures
+
+1. **Missing library sonames** - Nix binaries may need different sonames than conda-forge provides. Bundle those libs from Nix.
+
+2. **Absolute paths hardcoded** - Some Nix builds have absolute `/nix/store` paths. Use `patchelf --replace-needed` to fix.
+
+3. **RPATH order wrong** - If bundled libs exist but aren't being used, fix RPATH order: `patchelf --set-rpath '$ORIGIN:$ORIGIN/..'`
+
+4. **Symbol lookup errors** - Library was compiled against one version but linking against another. Bundle the correct version.
+
+### Only upload after smoketest passes
+
+```bash
+rattler-build upload prefix --channel <channel> output/linux-64/<package>.conda
+```
+
+---
+
+## 5) Pre-push Validation (for CI/CD)
 
 **Always validate your build locally before pushing to avoid CI failures.**
 
@@ -173,7 +227,7 @@ git push origin main
 
 ---
 
-## 5) Upload
+## 6) Upload
 
 ### prefix.dev (private/public channel)
 If your channel URL is:
